@@ -56,6 +56,10 @@ def accumulate_into_next_rnm(colors_current, colors_next):
 			colors_next.r[index] += colors_current.r[index]
 			colors_next.g[index] += colors_current.g[index]
 			colors_next.b[index] += colors_current.b[index]
+			
+			colors_current.r[index] = 0;
+			colors_current.g[index] = 0;
+			colors_current.b[index] = 0;
 	
 def desaturate_light (r, g, b):
 	return (r * 0.22) + (g * 0.707) + (b * 0.071)
@@ -90,9 +94,6 @@ def convert_rnm_to_directional(colorsX, colorsY, colorsZ):
 			scale0 = scale1 = scale2 = one_over_three_times_dot_rnm_basis_is_normal_straight_up
 		else:
 			one_over_scale_average = one_over_three_times_dot_rnm_basis_is_normal_straight_up
-			# #??? is this correct?
-			if desaturatedAverageLight != 0:
-				one_over_scale_average = 1 / desaturatedAverageLight
 			scale0 = desaturate_light(light0[0], light0[1], light0[2]) * one_over_scale_average
 			scale1 = desaturate_light(light1[0], light1[1], light1[2]) * one_over_scale_average
 			scale2 = desaturate_light(light2[0], light2[1], light2[2]) * one_over_scale_average
