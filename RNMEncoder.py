@@ -71,11 +71,11 @@ def main():
 	save(finalColors, out_name, size)
 
 
-def subtract_negative_values(colors_positive, colors_negative):
-	for index in range(0, len(colors_positive.r)):
-		colors_positive.r[index] -= colors_negative.r[index]
-		colors_positive.g[index] -= colors_negative.g[index]
-		colors_positive.b[index] -= colors_negative.b[index]
+def subtract_negative_values(colors_pos, colors_neg):
+	for (pos_r, pos_g, pos_b, neg_r, neg_g, neg_b) in zip(colors_pos.r, colors_pos.g, colors_pos.b, colors_neg.r, colors_neg.g, colors_neg.b):
+		pos_r -= neg_r
+		pos_g -= neg_g
+		pos_b -= neg_b
 		
 
 def make_rnm_non_negative(colorsX, colorsY, colorsZ):
