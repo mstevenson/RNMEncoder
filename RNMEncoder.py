@@ -7,20 +7,15 @@ import Imath
 
 def main():
 	xImg = OpenEXR.InputFile('images/x.exr')
-	xNegImg = OpenEXR.InputFile('images/-x.exr')
-	yImg = OpenEXR.InputFile('images/y.exr')
-	yNegImg = OpenEXR.InputFile('images/-y.exr')
-	zImg = OpenEXR.InputFile('images/z.exr')
-	zNegImg = OpenEXR.InputFile('images/-z.exr')
 	
-	x = Colors.from_image(xImg)
-	xNeg = Colors.from_image(xNegImg)
-	y = Colors.from_image(yImg)
-	yNeg = Colors.from_image(yNegImg)
-	z = Colors.from_image(zImg)
-	zNeg = Colors.from_image(zNegImg)
+	x = Colors.from_image( xImg )
+	xNeg = Colors.from_image( OpenEXR.InputFile('images/-x.exr') )
+	y = Colors.from_image( OpenEXR.InputFile('images/y.exr') )
+	yNeg = Colors.from_image( OpenEXR.InputFile('images/-y.exr') )
+	z = Colors.from_image( OpenEXR.InputFile('images/z.exr') )
+	zNeg = Colors.from_image( OpenEXR.InputFile('images/-z.exr') )
 	
-	# Compute the size
+	# calculate the image dimensions
 	dw = xImg.header()['dataWindow']
 	size = (dw.max.x - dw.min.x + 1, dw.max.y - dw.min.y + 1)
 	
@@ -28,14 +23,14 @@ def main():
 	subtract_negative_values(x, xNeg)
 	subtract_negative_values(y, yNeg)
 	subtract_negative_values(z, zNeg)
-		
+	
 	make_rnm_non_negative (x, y, z)
 	
 	# write directional lightmap into x
 	finalColors = convert_rnm_to_directional(x, y, z)
 	
 	Save(finalColors, size)
-	
+
 
 def subtract_negative_values(colors_positive, colors_negative):
 	for index in range(0, len(colors_positive.r)):
@@ -50,85 +45,86 @@ def make_rnm_non_negative(colorsX, colorsY, colorsZ):
 	accumulate_into_next_rnm (colorsZ, colorsX)
 	
 def accumulate_into_next_rnm(colors_current, colors_next):
-	for index in range(0, len(colors_current.r)):
-		desaturated = desaturate_light(colors_current.r[index], colors_current.g[index], colors_current.b[index])
+	for (cr, cg, cb, nr, ng, nb) in zip(colors_current.r, colors_current.g, colors_current.b, colors_next.r, colors_next.g, colors_next.b):
+		desaturated = desaturate_light(Vector3(cr, cg, cb))
 		if desaturated < 0:
-			colors_next.r[index] += colors_current.r[index]
-			colors_next.g[index] += colors_current.g[index]
-			colors_next.b[index] += colors_current.b[index]
-			
-			colors_current.r[index] = 0;
-			colors_current.g[index] = 0;
-			colors_current.b[index] = 0;
+			nr += cr
+			ng += cg
+			nb += cb
+			cr = 0;
+			cg = 0;
+			cb = 0;
 	
-def desaturate_light (r, g, b):
-	return (r * 0.22) + (g * 0.707) + (b * 0.071)
+def desaturate_light (rgb_vector):
+	return (rgb_vector.x * 0.22) + (rgb_vector.y * 0.707) + (rgb_vector.z * 0.071)
 
 # returns directional lightmap Color data object
 def convert_rnm_to_directional(colorsX, colorsY, colorsZ):
-	# previous name:  dot_rnm_basis_normal_straight_up
-	normal = 0.5773503
-	one_over_three_times_dot_rnm_basis_is_normal_straight_up = 1 / (3 * normal)
+	dot_rnm_basis_normal_straight_up = 0.5773503
+	one_over_three_times_dot_rnm_basis_is_normal_straight_up = 1 / (3 * dot_rnm_basis_normal_straight_up)
 	k_rgbm_max_range = 8
-	# previous name:  max_rgbm_precision_over_two
-	max_precision = 1 / (256 * k_rgbm_max_range * 2)
+	max_rgbm_precision_over_two = 1 / (256 * k_rgbm_max_range * 2)
 	
 	directional = Colors();
-	directional.r = colorsX.r
-	directional.g = colorsY.r
-	directional.b = colorsZ.r
 	
-	for index in range(0, len(colorsX.r)):
-		light0 = (colorsX.r[index], colorsX.g[index], colorsX.b[index])
-		light1 = (colorsY.r[index], colorsY.g[index], colorsY.b[index])
-		light2 = (colorsZ.r[index], colorsZ.g[index], colorsZ.b[index])
+	for (xr, xg, xb, yr, yg, yb, zr, zg, zb) in zip(colorsX.r, colorsX.g, colorsX.b, colorsY.r, colorsY.g, colorsY.b, colorsZ.r, colorsZ.g, colorsZ.b):
+		light0 = Vector3(xr, xg, xb)
+		light1 = Vector3(yr, yg, yb)
+		light2 = Vector3(zr, zg, zb)
 		
-		averageLight0 = [normal * c for c in light0]
-		averageLight1 = [normal * c for c in light1]
-		averageLight2 = [normal * c for c in light2]
+		average_light = (light0 * dot_rnm_basis_normal_straight_up) + (light1 * dot_rnm_basis_normal_straight_up) + (light2 * dot_rnm_basis_normal_straight_up)
 		
-		averageLightVec = ((averageLight0[0] + averageLight1[0] + averageLight2[0]), (averageLight0[1] + averageLight1[1] + averageLight2[1]), (averageLight0[2] + averageLight1[2] + averageLight2[2]))
-		desaturatedAverageLight = desaturate_light(averageLightVec[0], averageLightVec[1], averageLightVec[2])
+		desaturated_average_light = desaturate_light(average_light)
 		
-		if averageLightVec[0] < max_precision and averageLightVec[1] < max_precision and averageLightVec[2] < max_precision:
+		if average_light.x < max_rgbm_precision_over_two and average_light.y < max_rgbm_precision_over_two and average_light.z < max_rgbm_precision_over_two:
 			scale0 = scale1 = scale2 = one_over_three_times_dot_rnm_basis_is_normal_straight_up
 		else:
-			one_over_scale_average = one_over_three_times_dot_rnm_basis_is_normal_straight_up
-			scale0 = desaturate_light(light0[0], light0[1], light0[2]) * one_over_scale_average
-			scale1 = desaturate_light(light1[0], light1[1], light1[2]) * one_over_scale_average
-			scale2 = desaturate_light(light2[0], light2[1], light2[2]) * one_over_scale_average
+			one_over_scale_average = 1 / desaturated_average_light
+			scale0 = desaturate_light(light0) * one_over_scale_average
+			scale1 = desaturate_light(light1) * one_over_scale_average
+			scale2 = desaturate_light(light2) * one_over_scale_average
 			
-		directional.r[index] = scale0
-		directional.g[index] = scale1
-		directional.b[index] = scale2
+		directional.r.append(scale0)
+		directional.g.append(scale1)
+		directional.b.append(scale2)
 	
 	return directional
 	
 
+def pixel_list_from_image(exr_image):
+	FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+	(Rs,Gs,Bs) = [array.array('f', exr_image.channel(Channel, FLOAT)).tolist() for Channel in ("R", "G", "B") ]
+	return [Pixel(r,g,b) for r,g,b in zip(Rs,Gs,Bs)]
+
+class Vector3:
+	def __init__(self, x, y, z):
+		self.x = x
+		self.y = y
+		self.z = z
+	def __add__(self, other):
+		return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
+	def __mul__(self, scaler):
+		return Vector3(self.x * scaler, self.y * scaler, self.z * scaler)
 
 class Colors:
 	def __init__(self):
 		self.r = []
 		self.g = []
 		self.b = []
+		
 	@classmethod
-	def from_image (self, image):
+	def from_image (self, exr_image):
+		FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
 		c = Colors()
-		(c.r, c.g, c.b) = c.get_rgb(image)
+		(c.r,c.g,c.b) = [array.array('f', exr_image.channel(Channel, FLOAT)).tolist() for Channel in ("R", "G", "B") ]
 		return c
+		
 	@classmethod
 	def from_rgb (self, r, g, b):
 		c = Colors()
-		c.r = r
-		c.g = g
-		c.b = b
+		(c.r,c.g,c.b) = (r,g,b)
 		return c
-		
-	def get_rgb(self, image):
-		# Read the three color channels as 32-bit floats
-		FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
-		(R,G,B) = [array.array('f', image.channel(Chan, FLOAT)).tolist() for Chan in ("R", "G", "B") ]
-		return (R,G,B)
+
 
 def Save(colors, size):
 	# Convert to strings
