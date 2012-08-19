@@ -5,15 +5,54 @@ import array
 import OpenEXR
 import Imath
 
+class Vector3:
+	def __init__(self, x, y, z):
+		self.x = x
+		self.y = y
+		self.z = z
+	def __add__(self, other):
+		return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
+	def __mul__(self, scaler):
+		return Vector3(self.x * scaler, self.y * scaler, self.z * scaler)
+	def zero(self):
+		return Vector3(0, 0, 0)
+
+class Colors:
+	def __init__(self):
+		self.r = []
+		self.g = []
+		self.b = []
+		
+	@classmethod
+	def from_image (self, exr_image):
+		FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
+		c = Colors()
+		(c.r,c.g,c.b) = [array.array('f', exr_image.channel(Channel, FLOAT)).tolist() for Channel in ("R", "G", "B") ]
+		return c
+		
+	@classmethod
+	def from_rgb (self, r, g, b):
+		c = Colors()
+		(c.r,c.g,c.b) = (r,g,b)
+		return c
+
+
 def main():
-	xImg = OpenEXR.InputFile('images/x.exr')
+	if len(sys.argv) != 3:
+	    print "usage: RNMEncoder.py input-folder output-name"
+	    sys.exit(1)
+	
+	input_folder = sys.argv[1]
+	out_name = sys.argv[2]
+	
+	xImg = OpenEXR.InputFile(input_folder + '/x.exr')
 	
 	x = Colors.from_image( xImg )
-	xNeg = Colors.from_image( OpenEXR.InputFile('images/-x.exr') )
-	y = Colors.from_image( OpenEXR.InputFile('images/y.exr') )
-	yNeg = Colors.from_image( OpenEXR.InputFile('images/-y.exr') )
-	z = Colors.from_image( OpenEXR.InputFile('images/z.exr') )
-	zNeg = Colors.from_image( OpenEXR.InputFile('images/-z.exr') )
+	xNeg = Colors.from_image( OpenEXR.InputFile(input_folder + '/-x.exr') )
+	y = Colors.from_image( OpenEXR.InputFile(input_folder + '/y.exr') )
+	yNeg = Colors.from_image( OpenEXR.InputFile(input_folder + '/-y.exr') )
+	z = Colors.from_image( OpenEXR.InputFile(input_folder + '/z.exr') )
+	zNeg = Colors.from_image( OpenEXR.InputFile(input_folder + '/-z.exr') )
 	
 	# calculate the image dimensions
 	dw = xImg.header()['dataWindow']
@@ -29,7 +68,7 @@ def main():
 	# write directional lightmap into x
 	finalColors = convert_rnm_to_directional(x, y, z)
 	
-	Save(finalColors, size)
+	save(finalColors, out_name, size)
 
 
 def subtract_negative_values(colors_positive, colors_negative):
@@ -44,19 +83,20 @@ def make_rnm_non_negative(colorsX, colorsY, colorsZ):
 	accumulate_into_next_rnm (colorsY, colorsZ)
 	accumulate_into_next_rnm (colorsZ, colorsX)
 	
+	
 def accumulate_into_next_rnm(colors_current, colors_next):
 	for (cr, cg, cb, nr, ng, nb) in zip(colors_current.r, colors_current.g, colors_current.b, colors_next.r, colors_next.g, colors_next.b):
-		desaturated = desaturate_light(Vector3(cr, cg, cb))
+		current = Vector3(cr, cg, cb)
+		next = Vector3(nr, ng, nb)
+		desaturated = desaturate_light(current)
 		if desaturated < 0:
-			nr += cr
-			ng += cg
-			nb += cb
-			cr = 0;
-			cg = 0;
-			cb = 0;
+			next = next + current
+			current = Vector3.zero
+	
 	
 def desaturate_light (rgb_vector):
 	return (rgb_vector.x * 0.22) + (rgb_vector.y * 0.707) + (rgb_vector.z * 0.071)
+
 
 # returns directional lightmap Color data object
 def convert_rnm_to_directional(colorsX, colorsY, colorsZ):
@@ -96,43 +136,15 @@ def pixel_list_from_image(exr_image):
 	(Rs,Gs,Bs) = [array.array('f', exr_image.channel(Channel, FLOAT)).tolist() for Channel in ("R", "G", "B") ]
 	return [Pixel(r,g,b) for r,g,b in zip(Rs,Gs,Bs)]
 
-class Vector3:
-	def __init__(self, x, y, z):
-		self.x = x
-		self.y = y
-		self.z = z
-	def __add__(self, other):
-		return Vector3(self.x + other.x, self.y + other.y, self.z + other.z)
-	def __mul__(self, scaler):
-		return Vector3(self.x * scaler, self.y * scaler, self.z * scaler)
 
-class Colors:
-	def __init__(self):
-		self.r = []
-		self.g = []
-		self.b = []
-		
-	@classmethod
-	def from_image (self, exr_image):
-		FLOAT = Imath.PixelType(Imath.PixelType.FLOAT)
-		c = Colors()
-		(c.r,c.g,c.b) = [array.array('f', exr_image.channel(Channel, FLOAT)).tolist() for Channel in ("R", "G", "B") ]
-		return c
-		
-	@classmethod
-	def from_rgb (self, r, g, b):
-		c = Colors()
-		(c.r,c.g,c.b) = (r,g,b)
-		return c
-
-
-def Save(colors, size):
+def save(colors, name, size):
 	# Convert to strings
 	(Rs, Gs, Bs) = [ array.array('f', Chan).tostring() for Chan in (colors.r, colors.g, colors.b) ]
 	
 	# Write the three color channels to the output file
-	out = OpenEXR.OutputFile("LightmapScale-0.exr", OpenEXR.Header(size[0], size[1]))
+	out = OpenEXR.OutputFile(name + ".exr", OpenEXR.Header(size[0], size[1]))
 	out.writePixels({'R' : Rs, 'G' : Gs, 'B' : Bs })
+
 
 if __name__ == "__main__":
 	main();
